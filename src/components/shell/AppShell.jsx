@@ -2,11 +2,12 @@ import React, { useState, useMemo, useCallback } from "react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import {
-  Upload, Database, Table2, LayoutDashboard, Landmark, LayoutGrid,
+  Upload, Database, Table2, LayoutDashboard, Landmark, LayoutGrid, LogOut, User,
 } from "lucide-react";
 
 import { shellColors } from "../../constants/theme";
 import { TOOLS } from "../../constants/tools";
+import { useAuth } from "../../context/AuthContext";
 import {
   guessHeaderRowUniversal,
   guessCoaHeaderRow,
@@ -28,6 +29,7 @@ import DashboardScreen from "../dashboard/DashboardScreen";
 import HomeScreen from "./HomeScreen";
 
 function AppShell() {
+  const { user, signOut } = useAuth();
   const [active, setActive] = useState("home");
 
   const [sharedFile, setSharedFile] = useState(null); // { fileName, rawRows }
@@ -200,24 +202,129 @@ function AppShell() {
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "'Inter', system-ui, sans-serif", background: shellColors.bg }}>
       {/* Sidebar */}
-      <div style={{ width: 232, flexShrink: 0, borderRight: `1px solid ${shellColors.line}`, background: "#fff", padding: "20px 14px", position: "sticky", top: 0, height: "100vh" }}>
-        <div style={{ padding: "0 8px 18px", borderBottom: `1px solid ${shellColors.line}`, marginBottom: 14 }}>
-          <div style={{ fontSize: 15.5, fontWeight: 800, color: shellColors.ink, marginTop: 2 }}>Ledger Watch</div>
+      <div
+        style={{
+          width: 232,
+          flexShrink: 0,
+          borderRight: `1px solid ${shellColors.line}`,
+          background: "#fff",
+          padding: "20px 14px 16px",
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          boxSizing: "border-box",
+        }}
+      >
+        <div>
+          <div style={{ padding: "0 8px 18px", borderBottom: `1px solid ${shellColors.line}`, marginBottom: 14 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 800, color: shellColors.ink, marginTop: 2 }}>Ledger Watch</div>
+            <div style={{ fontSize: 11, color: shellColors.inkMuted, marginTop: 2 }}>Monthly Close Audit</div>
+          </div>
+          <NavButton toolKey="home" label="Home" Icon={LayoutGrid} />
+          <NavButton toolKey="sharedfiles" label="Shared Files" Icon={Database} />
+          <NavButton toolKey="dashboard" label="Reports" Icon={LayoutDashboard} />
+          <div
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: shellColors.inkFaint,
+              padding: "14px 14px 6px",
+            }}
+          >
+            Tools
+          </div>
+          {TOOLS.map((t) => (
+            <NavButton key={t.key} toolKey={t.key} label={t.name} Icon={t.icon} indent />
+          ))}
         </div>
-        <NavButton toolKey="home" label="Home" Icon={LayoutGrid} />
-        <NavButton toolKey="sharedfiles" label="Shared Files" Icon={Database} />
-        <NavButton toolKey="dashboard" label="Reports" Icon={LayoutDashboard} />
+
+        {/* User Profile & Sign Out at bottom of sidebar */}
         <div
           style={{
-            fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-            color: shellColors.inkFaint, padding: "14px 14px 6px",
+            borderTop: `1px solid ${shellColors.line}`,
+            paddingTop: 12,
+            marginTop: 12,
           }}
         >
-          Tools
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 8px",
+              borderRadius: 6,
+              background: shellColors.bg,
+              marginBottom: 8,
+            }}
+          >
+            <div
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: "50%",
+                background: shellColors.accent,
+                color: "#FFFFFF",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <User size={14} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: shellColors.ink,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                title={user?.email || "User"}
+              >
+                {user?.email || "User"}
+              </div>
+              <div style={{ fontSize: 10.5, color: shellColors.good, fontWeight: 600 }}>Active</div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => signOut()}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 7,
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: 6,
+              border: `1px solid ${shellColors.line}`,
+              background: "#FFFFFF",
+              color: shellColors.danger,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "background 0.15s, border-color 0.15s",
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = shellColors.dangerSoft;
+              e.currentTarget.style.borderColor = "#FCA5A5";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = "#FFFFFF";
+              e.currentTarget.style.borderColor = shellColors.line;
+            }}
+          >
+            <LogOut size={13} /> Sign Out
+          </button>
         </div>
-        {TOOLS.map((t) => (
-          <NavButton key={t.key} toolKey={t.key} label={t.name} Icon={t.icon} indent />
-        ))}
       </div>
 
       {/* Main content */}

@@ -810,9 +810,15 @@ function getObservations(transactions, coaAccounts, settingsOverride) {
     byMonth.forEach(({ monthLabel, categories }, monthKey) => {
       const cats = [...categories];
       const catText = cats.length === 1 ? cats[0] : cats.slice(0, -1).join(", ") + " and " + cats[cats.length - 1];
+      const normalCount = vd.categoryCounts[vd.normalCategory] || 0;
+      const total = vd.records.length;
       obs.push({
         module: "vendor", monthKey, monthLabelStr: monthLabel,
-        text: `${v} — coded to ${catText} in ${monthLabel}, normally ${formatCategories(vd)}.`,
+        title: "Vendor Coding Exception",
+        issue: `${v} was coded to ${catText} this month, instead of the usual ${formatCategories(vd)}.`,
+        recommendation: "Worth confirming that's intentional.",
+        detailedIssue: `${v} was coded to ${catText} this month — it's been coded to ${formatCategories(vd)} in ${normalCount} of its last ${total} transaction${total === 1 ? "" : "s"} on file.`,
+        detailedRecommendation: total >= 6 ? "Worth confirming that's intentional, since it's a break from a pretty consistent pattern." : "Worth confirming that's intentional — there isn't much history on this vendor yet, so it's worth a closer look either way.",
       });
     });
   });

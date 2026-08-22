@@ -216,7 +216,7 @@ function duplicateSentence(res, kind) {
 
 function DuplicateTransactionAudit({ transactions }) {
   const [selectedMonth, setSelectedMonth] = useState(null);
-  const [threshold, setThreshold] = useState(80);
+  const [threshold, setThreshold] = useState(70);
   const [minHistoryMonths, setMinHistoryMonths] = useState(3);
   const [materialityThreshold, setMaterialityThreshold] = useState(1000);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -290,6 +290,7 @@ function DuplicateTransactionAudit({ transactions }) {
                     <select value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} style={{ ...styles.select, width: "100%" }}>
                       <option value={100}>100% — single tx every other active month</option>
                       <option value={80}>80% or more of other active months</option>
+                      <option value={70}>70% or more of other active months</option>
                       <option value={60}>60% or more of other active months</option>
                       <option value={50}>50% or more of other active months</option>
                     </select>
@@ -384,14 +385,22 @@ function DuplicateTransactionAudit({ transactions }) {
 function getObservations(transactions, settingsOverride) {
   const dataset = buildDatasetFromTransactions(transactions);
   if (!dataset.tx.length) return [];
-  const s = { thresholdPct: 80, minHistoryMonths: 3, materialityThreshold: 1000, ...settingsOverride };
+  const s = { thresholdPct: 70, minHistoryMonths: 3, materialityThreshold: 1000, ...settingsOverride };
   const months = getMonths(dataset);
   const obs = [];
   months.forEach((m) => {
     const vRes = analyzeGroup(dataset, months, m, s.thresholdPct, s.minHistoryMonths, s.materialityThreshold, (t) => t[1], (k) => k);
-    vRes.flagged.forEach((r) => obs.push({ module: "duplicate", monthKey: m, monthLabelStr: monthLabel(m), text: `${r.label} — ${r.thisCount} transactions in ${monthLabel(m)} totaling ${fmtAmt(r.thisAmt)}, versus the usual one; confirm this isn't a duplicate payment.` }));
+    vRes.flagged.forEach((r) => obs.push({ module: "duplicate", monthKey: m, monthLabelStr: monthLabel(m), title: "Possible Duplicate",
+      issue: `${r.label} posted ${r.thisCount} times this month (${fmtAmt(r.thisAmt)} total) — usually it's just once.`,
+      recommendation: "Worth checking it's not a duplicate payment.",
+      detailedIssue: `${r.label} posted ${r.thisCount} times this month totaling ${fmtAmt(r.thisAmt)} — it's been a single transaction in ${Math.round(r.freq)}% of the last ${r.otherActive.length} active month${r.otherActive.length === 1 ? "" : "s"}.`,
+      detailedRecommendation: "Worth pulling up both transactions to confirm they're not the same invoice paid twice." }));
     const aRes = analyzeGroup(dataset, months, m, s.thresholdPct, s.minHistoryMonths, s.materialityThreshold, (t) => dataset.accounts[t[3]][0], (k) => k);
-    aRes.flagged.forEach((r) => obs.push({ module: "duplicate", monthKey: m, monthLabelStr: monthLabel(m), text: `${r.label} (account) — ${r.thisCount} transactions in ${monthLabel(m)} totaling ${fmtAmt(r.thisAmt)}, versus the usual one; confirm this isn't a duplicate payment.` }));
+    aRes.flagged.forEach((r) => obs.push({ module: "duplicate", monthKey: m, monthLabelStr: monthLabel(m), title: "Possible Duplicate",
+      issue: `The ${r.label} account saw ${r.thisCount} transactions this month (${fmtAmt(r.thisAmt)} total) — usually it's just one.`,
+      recommendation: "Worth checking it's not a duplicate payment.",
+      detailedIssue: `The ${r.label} account saw ${r.thisCount} transactions this month totaling ${fmtAmt(r.thisAmt)} — it's been a single transaction in ${Math.round(r.freq)}% of the last ${r.otherActive.length} active month${r.otherActive.length === 1 ? "" : "s"}.`,
+      detailedRecommendation: "Worth pulling up both transactions to confirm they're not the same invoice paid twice." }));
   });
   return obs;
 }

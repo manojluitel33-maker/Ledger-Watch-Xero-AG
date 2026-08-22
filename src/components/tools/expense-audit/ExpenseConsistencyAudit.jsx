@@ -492,32 +492,50 @@ function getObservations(transactions, coaAccounts, settingsOverride) {
   const settings = { ...defaultSettings, ...settingsOverride };
   const monthKeys = getGlobalMonthKeys(accounts);
 
-  // One line per flag TYPE per month (missing / low / spike / varies),
-  // listing every account it applies to — rather than one line per
-  // account, which gets long fast once several accounts share the same
-  // finding. Dollar figures are intentionally left out here since a list
-  // of accounts with different typical/actual amounts is hard to read in
-  // one sentence; the exact numbers stay available in the tool itself.
-  const byMonth = new Map(); // "YYYY-MM" -> { missing: [], low: [], spike: [], pattern: [] }
+  // Every flagged account gets its own paragraph with its own numbers —
+  // nothing gets folded into "plus N others."
+  const byMonth = new Map(); // "YYYY-MM" -> { missing: [], low: [], spike: [], pattern: [] }, items are {name, actual, typical}
   accounts.forEach((acc) => {
     if (classifyType(acc.type) !== "Expense") return; // matches this tool's default type filter
-    const { flags } = analyzeAccount(acc, monthKeys, settings);
+    const { flags, typical } = analyzeAccount(acc, monthKeys, settings);
     monthKeys.forEach((k) => {
       const f = flags[k];
       if (!f) return;
       if (!byMonth.has(k)) byMonth.set(k, { missing: [], low: [], spike: [], pattern: [] });
-      byMonth.get(k)[f].push(acc.name);
+      byMonth.get(k)[f].push({ name: acc.name, actual: Math.abs(acc.byMonth[k] || 0), typical });
     });
   });
 
   const obs = [];
   byMonth.forEach((groups, k) => {
     const monthName = monthKeyLabel(k);
-    const joinNames = (names) => names.length === 1 ? names[0] : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
-    if (groups.missing.length) obs.push({ module: "expense", monthKey: k, monthLabelStr: monthName, text: `No spend recorded in ${monthName} for: ${joinNames(groups.missing)} — confirm nothing was missed.` });
-    if (groups.low.length) obs.push({ module: "expense", monthKey: k, monthLabelStr: monthName, text: `Below the usual level in ${monthName}: ${joinNames(groups.low)}.` });
-    if (groups.spike.length) obs.push({ module: "expense", monthKey: k, monthLabelStr: monthName, text: `Above the usual level in ${monthName}: ${joinNames(groups.spike)} — worth a closer look.` });
-    if (groups.pattern.length) obs.push({ module: "expense", monthKey: k, monthLabelStr: monthName, text: `Off the usual pattern in ${monthName}: ${joinNames(groups.pattern)}.` });
+    const joinNames = (items) => { const n = items.map((i) => i.name); return n.length === 1 ? n[0] : n.slice(0, -1).join(", ") + " and " + n[n.length - 1]; };
+    const wasWere = (items) => items.length === 1 ? "was" : "were";
+    const missingParas = (items) => items.map((i) => `${i.name} typically posts around $${fmtCompact(i.typical)} a month, but nothing came through in ${monthName}.`);
+    const lowParas = (items) => items.map((i) => `${i.name} came in at $${fmtCompact(i.actual)} this month, well below its typical $${fmtCompact(i.typical)}.`);
+    const spikeParas = (items) => items.map((i) => `${i.name} came in at $${fmtCompact(i.actual)} this month, well above its typical $${fmtCompact(i.typical)}.`);
+    const patternParas = (items) => items.map((i) => `${i.name} posted $${fmtCompact(i.actual)} this month, breaking from its usual steady pattern.`);
+
+    if (groups.missing.length) obs.push({ module: "expense", monthKey: k, monthLabelStr: monthName, title: "Missing Expense",
+      issue: `${joinNames(groups.missing)} ${wasWere(groups.missing)} due this month but nothing came through.`,
+      recommendation: "Worth confirming nothing was missed.",
+      detailedIssue: missingParas(groups.missing),
+      detailedRecommendation: "Worth confirming nothing was missed, or booked to a different account by mistake." });
+    if (groups.low.length) obs.push({ module: "expense", monthKey: k, monthLabelStr: monthName, title: "Below Usual Spend",
+      issue: `${joinNames(groups.low)} came in lighter than usual this month.`,
+      recommendation: "Could just be timing — worth a glance.",
+      detailedIssue: lowParas(groups.low),
+      detailedRecommendation: "Could just be timing — worth a glance to confirm nothing's outstanding." });
+    if (groups.spike.length) obs.push({ module: "expense", monthKey: k, monthLabelStr: monthName, title: "Spend Spike",
+      issue: `${joinNames(groups.spike)} ran higher than usual this month.`,
+      recommendation: "Worth a quick look at what drove it.",
+      detailedIssue: spikeParas(groups.spike),
+      detailedRecommendation: "Worth a quick look at what drove it — a one-off charge or a new rate would explain it." });
+    if (groups.pattern.length) obs.push({ module: "expense", monthKey: k, monthLabelStr: monthName, title: "Off-Pattern Posting",
+      issue: `${joinNames(groups.pattern)} broke from ${groups.pattern.length === 1 ? "its" : "their"} usual pattern this month.`,
+      recommendation: "Worth checking the coding looks right.",
+      detailedIssue: patternParas(groups.pattern),
+      detailedRecommendation: "Worth checking the coding looks right, or confirming it's a one-off." });
   });
   return obs;
 }

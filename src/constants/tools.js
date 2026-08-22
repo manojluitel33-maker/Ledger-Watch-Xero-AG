@@ -1,4 +1,4 @@
-import { Receipt, Copy, Landmark, ScanEye } from "lucide-react";
+import { Receipt, Copy, Landmark, ScanEye, ArrowLeftRight } from "lucide-react";
 import { shellColors } from "./theme";
 
 export const TOOLS = [
@@ -26,6 +26,12 @@ export const TOOLS = [
     blurb: "Learns each vendor's usual account from history and flags anything posted somewhere else.",
     icon: ScanEye,
   },
+  {
+    key: "ratio",
+    name: "Ratio Consistency Audit",
+    blurb: "Tracks each expense account's share of total sales and flags months where that share drifts far from normal.",
+    icon: ArrowLeftRight,
+  },
 ];
 
 export const DASHBOARD_MODULES = [
@@ -33,6 +39,7 @@ export const DASHBOARD_MODULES = [
   { key: "duplicate", label: "Duplicate Audit", color: shellColors.danger },
   { key: "reconciliation", label: "Bank Reconciliation", color: shellColors.accent },
   { key: "vendor", label: "Vendor Review", color: "#7C3AED" },
+  { key: "ratio", label: "Ratio Consistency", color: "#0D9488" },
 ];
 
 export const UNIVERSAL_FIELDS = [

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import {
@@ -18,8 +18,9 @@ import {
 
 import { ExpenseConsistencyAuditTool } from "../tools/expense-audit";
 import { DuplicateTransactionAuditTool } from "../tools/duplicate-audit";
-import { BankReconciliationTool } from "../tools/bank-reconciliation";
+import { BankReconciliationTool, reconcile, buildBankTx, filterByMonthWithBuffer, monthRange } from "../tools/bank-reconciliation";
 import { VendorExceptionFlaggerTool } from "../tools/vendor-exceptions";
+import { RatioConsistencyAuditTool } from "../tools/ratio-audit";
 
 import UniversalColumnMapper from "../shared/UniversalColumnMapper";
 import CoaColumnMapper from "../shared/CoaColumnMapper";
@@ -151,6 +152,10 @@ function AppShell() {
     setBankFiles((prev) => prev.map((f) => (f.id === id ? { ...f, accountLabel } : f)));
   };
 
+  const handleSetBankMonth = (id, monthLabel) => {
+    setBankFiles((prev) => prev.map((f) => (f.id === id ? { ...f, monthLabel } : f)));
+  };
+
   const handleToggleBankReco = (id) => {
     setBankFiles((prev) => {
       const selectedCount = prev.filter((f) => f.selectedForReco).length;
@@ -182,6 +187,70 @@ function AppShell() {
     if (!coaFile || !coaMapping) return [];
     return buildCoaAccountsFromRows(coaFile.rawRows, coaMapping.headerRowIdx, coaMapping.mapping);
   }, [coaFile, coaMapping]);
+
+  // ── Auto-reconciliation ──────────────────────────────────────────────
+  // Whenever bank files are fully configured (mapped + account tagged +
+  // month tagged) AND Xero transactions are available, automatically
+  // compute reconciliation results and push them into bankRecoSnapshot
+  // so the Reports page picks them up without any manual step.
+  const MONTH_NAMES_LOOKUP = {
+    January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
+    July: 7, August: 8, September: 9, October: 10, November: 11, December: 12,
+  };
+
+  useEffect(() => {
+    if (!sharedTransactions || !sharedTransactions.length) return;
+    if (!bankFiles || !bankFiles.length) return;
+
+    // Build the same per-account map the reconciliation tool uses.
+    const xeroAccounts = {};
+    sharedTransactions.forEach((t) => {
+      if (!t.account || !t.date) return;
+      if (!xeroAccounts[t.account]) xeroAccounts[t.account] = [];
+      xeroAccounts[t.account].push({ date: t.date, contact: t.vendor || t.description || "", amount: t.amount });
+    });
+
+    const readyFiles = bankFiles.filter((f) => f.mapping && f.accountLabel && f.monthLabel);
+    if (!readyFiles.length) return;
+
+    const runs = readyFiles.map((bf) => {
+      const accountTx = xeroAccounts[bf.accountLabel] || [];
+      if (!accountTx.length) return null;
+
+      // Resolve month name (e.g. "July") → YYYY-MM by finding the most
+      // recent year in this account's Xero data that has that month.
+      const targetMonth = MONTH_NAMES_LOOKUP[bf.monthLabel];
+      if (!targetMonth) return null;
+
+      const yearsWithMonth = [...new Set(
+        accountTx
+          .filter((t) => t.date && t.date.getMonth() + 1 === targetMonth)
+          .map((t) => t.date.getFullYear())
+      )].sort((a, b) => b - a);
+
+      if (!yearsWithMonth.length) return null;
+      const year = yearsWithMonth[0];
+      const month = `${year}-${String(targetMonth).padStart(2, "0")}`;
+
+      const tolerance = 3;
+      const allBankTx = buildBankTx(bf.rows, bf.mapping);
+      const xeroTx = filterByMonthWithBuffer(accountTx, month, tolerance);
+      const bankTx = filterByMonthWithBuffer(allBankTx, month, tolerance);
+      const results = reconcile(xeroTx, bankTx, tolerance);
+
+      // Trim unmatched leftovers back to the true month range.
+      const { start, end } = monthRange(month);
+      const inMonth = (tx) => tx.date && tx.date >= start && tx.date <= end;
+      results.xeroOnly = results.xeroOnly.filter(inMonth);
+      results.bankOnly = results.bankOnly.filter(inMonth);
+
+      return { account: bf.accountLabel, month, results };
+    }).filter(Boolean);
+
+    if (runs.length) {
+      setBankRecoSnapshot(runs);
+    }
+  }, [bankFiles, sharedTransactions]);
 
   const NavButton = ({ toolKey, label, Icon, indent }) => (
     <button
@@ -339,6 +408,7 @@ function AppShell() {
             bankFiles={bankFiles} xeroAccountNames={xeroAccountNames} bankError={bankError}
             onUploadBank={handleBankUpload} onRemoveBank={handleRemoveBankFile}
             onEditBankMapping={(id) => setBankMapperOpenId(id)} onSetBankLabel={handleSetBankLabel}
+            onSetBankMonth={handleSetBankMonth}
           />
         )}
         {active === "dashboard" && (
@@ -362,6 +432,7 @@ function AppShell() {
           />
         )}
         {active === "vendor" && <VendorExceptionFlaggerTool.Component transactions={sharedTransactions} coaAccounts={sharedCoaAccounts} />}
+        {active === "ratio" && <RatioConsistencyAuditTool.Component transactions={sharedTransactions} coaAccounts={sharedCoaAccounts} />}
       </div>
 
       {mapperOpen && sharedFile && (

@@ -477,6 +477,7 @@ function AppShell() {
             onUploadBank={handleBankUpload} onRemoveBank={handleRemoveBankFile}
             onEditBankMapping={(id) => setBankMapperOpenId(id)} onSetBankLabel={handleSetBankLabel}
             onSetBankMonth={handleSetBankMonth}
+            onRunReport={() => setActive("dashboard")}
           />
         )}
         {active === "dashboard" && (

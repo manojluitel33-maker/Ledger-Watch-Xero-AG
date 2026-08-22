@@ -1293,4 +1293,5 @@ function BankReconciliation({ transactions, onResultsChange, bankFiles, onGoToSh
 }
 
 export const BankReconciliationTool = { Component: BankReconciliation };
+export { reconcile, buildBankTx, filterByMonthWithBuffer, monthRange };
 export default BankReconciliation;

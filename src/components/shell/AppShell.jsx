@@ -2,7 +2,8 @@ import React, { useState, useMemo, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import {
-  Upload, Database, Table2, LayoutDashboard, Landmark, LayoutGrid, LogOut, User,
+  Upload, Database, Table2, LayoutDashboard, Landmark, LogOut, User,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 
 import { shellColors } from "../../constants/theme";
@@ -27,11 +28,11 @@ import CoaColumnMapper from "../shared/CoaColumnMapper";
 import BankColumnMapper from "../shared/BankColumnMapper";
 import SharedFilesScreen from "../shared/SharedFilesScreen";
 import DashboardScreen from "../dashboard/DashboardScreen";
-import HomeScreen from "./HomeScreen";
 
 function AppShell() {
   const { user, signOut } = useAuth();
-  const [active, setActive] = useState("home");
+  const [active, setActive] = useState("sharedfiles");
+  const [toolsOpen, setToolsOpen] = useState(true);
 
   const [sharedFile, setSharedFile] = useState(null); // { fileName, rawRows }
   const [sharedMapping, setSharedMapping] = useState(null); // { mapping, headerRowIdx, dateFormatPref }
@@ -292,22 +293,31 @@ function AppShell() {
             <div style={{ fontSize: 15.5, fontWeight: 800, color: shellColors.ink, marginTop: 2 }}>Ledger Watch</div>
             <div style={{ fontSize: 11, color: shellColors.inkMuted, marginTop: 2 }}>Monthly Close Audit</div>
           </div>
-          <NavButton toolKey="home" label="Home" Icon={LayoutGrid} />
           <NavButton toolKey="sharedfiles" label="Shared Files" Icon={Database} />
           <NavButton toolKey="dashboard" label="Reports" Icon={LayoutDashboard} />
-          <div
+          <button
+            onClick={() => setToolsOpen((o) => !o)}
             style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              width: "100%",
               fontSize: 10.5,
               fontWeight: 700,
               letterSpacing: "0.06em",
               textTransform: "uppercase",
               color: shellColors.inkFaint,
               padding: "14px 14px 6px",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
             }}
+            title={toolsOpen ? "Hide tools" : "Show tools"}
           >
             Tools
-          </div>
-          {TOOLS.map((t) => (
+            {toolsOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          </button>
+          {toolsOpen && TOOLS.map((t) => (
             <NavButton key={t.key} toolKey={t.key} label={t.name} Icon={t.icon} indent />
           ))}
         </div>
@@ -398,7 +408,6 @@ function AppShell() {
 
       {/* Main content */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {active === "home" && <HomeScreen onOpen={setActive} />}
         {active === "sharedfiles" && (
           <SharedFilesScreen
             sharedFile={sharedFile} sharedMapping={sharedMapping} fileError={fileError}

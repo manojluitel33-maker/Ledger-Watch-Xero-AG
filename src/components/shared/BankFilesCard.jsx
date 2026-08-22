@@ -1,8 +1,8 @@
 import React, { useRef } from "react";
-import { Upload, Settings, Trash2, Landmark, ArrowRight, Check, FileSpreadsheet, AlertTriangle } from "lucide-react";
+import { Upload, Settings, Trash2, Landmark, ArrowRight, Check, FileSpreadsheet, AlertTriangle, Calendar } from "lucide-react";
 import { shellColors } from "../../constants/theme";
 
-function BankFilesCard({ bankFiles, xeroAccountNames, onUpload, onRemove, onEditMapping, onSetLabel }) {
+function BankFilesCard({ bankFiles, xeroAccountNames, onUpload, onRemove, onEditMapping, onSetLabel, onSetMonth }) {
   return (
     <div style={{ background: "#fff", border: `1px solid ${shellColors.line}`, borderRadius: 12, padding: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
@@ -43,6 +43,29 @@ function BankFilesCard({ bankFiles, xeroAccountNames, onUpload, onRemove, onEdit
             >
               <option value="">— not tagged —</option>
               {xeroAccountNames.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            <label style={{ fontSize: 10.5, fontWeight: 700, color: shellColors.inkMuted, textTransform: "uppercase" }}>Which month is this?</label>
+            <select
+              value={bf.monthLabel || ""}
+              onChange={(e) => onSetMonth(bf.id, e.target.value)}
+              style={{ width: "100%", marginTop: 4, border: `1px solid ${shellColors.line}`, borderRadius: 8, padding: "6px 8px", fontSize: 12.5, background: "#fff" }}
+            >
+              <option value="">— not tagged —</option>
+              <option value="January">January</option>
+              <option value="February">February</option>
+              <option value="March">March</option>
+              <option value="April">April</option>
+              <option value="May">May</option>
+              <option value="June">June</option>
+              <option value="July">July</option>
+              <option value="August">August</option>
+              <option value="September">September</option>
+              <option value="October">October</option>
+              <option value="November">November</option>
+              <option value="December">December</option>
             </select>
           </div>
 

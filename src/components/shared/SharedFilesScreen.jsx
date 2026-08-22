@@ -7,7 +7,7 @@ import BankFilesCard from "./BankFilesCard";
 function SharedFilesScreen({
   sharedFile, sharedMapping, onUploadMain, onRemoveMain, onEditMainMapping, fileError,
   coaFile, coaMapping, onUploadCoa, onRemoveCoa, onEditCoaMapping, coaError,
-  bankFiles, xeroAccountNames, onUploadBank, onRemoveBank, onEditBankMapping, onSetBankLabel, bankError,
+  bankFiles, xeroAccountNames, onUploadBank, onRemoveBank, onEditBankMapping, onSetBankLabel, onSetBankMonth, bankError,
 }) {
   return (
     <div style={{ padding: "32px 36px", maxWidth: 900 }}>
@@ -45,6 +45,7 @@ function SharedFilesScreen({
           onRemove={onRemoveBank}
           onEditMapping={onEditBankMapping}
           onSetLabel={onSetBankLabel}
+          onSetMonth={onSetBankMonth}
         />
       </div>
 

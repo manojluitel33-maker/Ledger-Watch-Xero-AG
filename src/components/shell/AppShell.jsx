@@ -226,16 +226,16 @@ function AppShell() {
   }, [coaFile, coaMapping]);
 
   // ── Auto-reconciliation ──────────────────────────────────────────────
-  // Whenever bank files are fully configured (mapped + account tagged +
-  // month tagged) AND Xero transactions are available, automatically
-  // compute reconciliation results and push them into bankRecoSnapshot
-  // so the Reports page picks them up without any manual step.
+  // Whenever bank files are configured (mapped + account/month tagged)
+  // AND Xero transactions are available, automatically compute reconciliation
+  // results and push them into bankRecoSnapshot so the Reports page picks
+  // them up without any manual step.
   const MONTH_NAMES_LOOKUP = {
     January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
     July: 7, August: 8, September: 9, October: 10, November: 11, December: 12,
   };
 
-  useEffect(() => {
+  const runAutoReconciliation = useCallback(() => {
     if (!sharedTransactions || !sharedTransactions.length) return;
     if (!bankFiles || !bankFiles.length) return;
 
@@ -247,30 +247,48 @@ function AppShell() {
       xeroAccounts[t.account].push({ date: t.date, contact: t.vendor || t.description || "", amount: t.amount });
     });
 
-    const readyFiles = bankFiles.filter((f) => f.mapping && f.accountLabel && f.monthLabel);
+    const readyFiles = bankFiles.filter((f) => f.mapping && (f.accountLabel || xeroAccountNames.length === 1));
     if (!readyFiles.length) return;
 
     const runs = readyFiles.map((bf) => {
-      const accountTx = xeroAccounts[bf.accountLabel] || [];
+      const accountName = bf.accountLabel || xeroAccountNames[0];
+      const accountTx = xeroAccounts[accountName] || [];
       if (!accountTx.length) return null;
-
-      // Resolve month name (e.g. "July") → YYYY-MM by finding the most
-      // recent year in this account's Xero data that has that month.
-      const targetMonth = MONTH_NAMES_LOOKUP[bf.monthLabel];
-      if (!targetMonth) return null;
-
-      const yearsWithMonth = [...new Set(
-        accountTx
-          .filter((t) => t.date && t.date.getMonth() + 1 === targetMonth)
-          .map((t) => t.date.getFullYear())
-      )].sort((a, b) => b - a);
-
-      if (!yearsWithMonth.length) return null;
-      const year = yearsWithMonth[0];
-      const month = `${year}-${String(targetMonth).padStart(2, "0")}`;
 
       const tolerance = (bf.tolerance !== undefined && bf.tolerance !== null && bf.tolerance !== "") ? Number(bf.tolerance) : 3;
       const allBankTx = buildBankTx(bf.rows, bf.mapping);
+      if (!allBankTx.length) return null;
+
+      let month = null;
+      if (bf.monthLabel && MONTH_NAMES_LOOKUP[bf.monthLabel]) {
+        const targetMonth = MONTH_NAMES_LOOKUP[bf.monthLabel];
+        const yearsWithMonth = [...new Set(
+          accountTx
+            .filter((t) => t.date && t.date.getMonth() + 1 === targetMonth)
+            .map((t) => t.date.getFullYear())
+        )].sort((a, b) => b - a);
+
+        if (yearsWithMonth.length) {
+          month = `${yearsWithMonth[0]}-${String(targetMonth).padStart(2, "0")}`;
+        }
+      }
+
+      // If month wasn't determined via monthLabel, detect from bankTx dates
+      if (!month) {
+        const validDates = allBankTx.map((t) => t.date).filter(Boolean);
+        if (validDates.length) {
+          const monthCounts = {};
+          validDates.forEach((d) => {
+            const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            monthCounts[k] = (monthCounts[k] || 0) + 1;
+          });
+          const sortedMonths = Object.keys(monthCounts).sort((a, b) => monthCounts[b] - monthCounts[a]);
+          if (sortedMonths.length) month = sortedMonths[0];
+        }
+      }
+
+      if (!month) return null;
+
       const xeroTx = filterByMonthWithBuffer(accountTx, month, tolerance);
       const bankTx = filterByMonthWithBuffer(allBankTx, month, tolerance);
       const results = reconcile(xeroTx, bankTx, tolerance);
@@ -281,13 +299,22 @@ function AppShell() {
       results.xeroOnly = results.xeroOnly.filter(inMonth);
       results.bankOnly = results.bankOnly.filter(inMonth);
 
-      return { account: bf.accountLabel, month, results };
+      return { account: accountName, month, results };
     }).filter(Boolean);
 
     if (runs.length) {
       setBankRecoSnapshot(runs);
     }
-  }, [bankFiles, sharedTransactions]);
+  }, [bankFiles, sharedTransactions, xeroAccountNames]);
+
+  useEffect(() => {
+    runAutoReconciliation();
+  }, [runAutoReconciliation]);
+
+  const handleRunReport = () => {
+    runAutoReconciliation();
+    setActive("dashboard");
+  };
 
   const NavButton = ({ toolKey, label, Icon, indent }) => (
     <button
@@ -511,7 +538,7 @@ function AppShell() {
             onEditBankMapping={(id) => setBankMapperOpenId(id)} onSetBankLabel={handleSetBankLabel}
             onSetBankMonth={handleSetBankMonth}
             onSetBankTolerance={handleSetBankTolerance}
-            onRunReport={() => setActive("dashboard")}
+            onRunReport={handleRunReport}
           />
         )}
         {active === "dashboard" && (

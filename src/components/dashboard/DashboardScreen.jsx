@@ -542,9 +542,9 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
             </div>
           )}
 
-          {activeModules.has("reconciliation") && !bankRecoSnapshot && (
+          {activeModules.has("reconciliation") && !bankRecoSnapshot && (!bankFiles || bankFiles.length === 0) && (
             <div style={{ fontSize: 12, color: shellColors.inkFaint, marginTop: 12 }}>
-              Bank Reconciliation isn't run automatically — go to <b>Settings</b> above to pick up to 3 tagged bank statements and run a reconciliation.
+              To include Bank Reconciliation observations in this report, upload and map bank statements in <b>Shared Files</b>.
             </div>
           )}
         </>

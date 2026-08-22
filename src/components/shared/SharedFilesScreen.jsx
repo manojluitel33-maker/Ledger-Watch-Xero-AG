@@ -8,7 +8,7 @@ import useViewport from "../../hooks/useViewport";
 function SharedFilesScreen({
   sharedFile, sharedMapping, onUploadMain, onRemoveMain, onEditMainMapping, fileError,
   coaFile, coaMapping, onUploadCoa, onRemoveCoa, onEditCoaMapping, coaError,
-  bankFiles, xeroAccountNames, onUploadBank, onRemoveBank, onEditBankMapping, onSetBankLabel, onSetBankMonth, bankError,
+  bankFiles, xeroAccountNames, onUploadBank, onRemoveBank, onEditBankMapping, onSetBankLabel, onSetBankMonth, onSetBankTolerance, bankError,
   onRunReport,
 }) {
   const { isMobile } = useViewport();
@@ -53,6 +53,7 @@ function SharedFilesScreen({
           onEditMapping={onEditBankMapping}
           onSetLabel={onSetBankLabel}
           onSetMonth={onSetBankMonth}
+          onSetTolerance={onSetBankTolerance}
         />
       </div>
 

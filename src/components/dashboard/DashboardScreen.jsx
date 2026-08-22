@@ -160,7 +160,7 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
   }, [xeroMonthOptions]);
 
   const reconcilableBankFiles = (bankFiles || []).filter((f) => f.mapping && f.accountLabel);
-  const selectedBankFiles = reconcilableBankFiles.filter((f) => f.selectedForReco);
+  const selectedBankFiles = reconcilableBankFiles.filter((f) => f.selectedForReco !== false);
 
   const runReconciliationFromDashboard = () => {
     if (!recoMonth || selectedBankFiles.length === 0) return;
@@ -400,17 +400,18 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
                 <div style={{ height: 1, background: shellColors.line, margin: "22px 0 18px" }} />
                 <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 6, color: moduleColor("reconciliation") }}>Bank Reconciliation</div>
                 <div style={{ fontSize: 11.5, color: shellColors.inkFaint, marginBottom: 14 }}>
-                  Pick up to 3 tagged bank statements from Shared Files, choose a month, and run them together. Results open in Bank Reconciliation.
+                  Tagged bank statements are automatically reconciled for the report. You can customize the accounts, month, and tolerance below to update the report in place.
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
                   {reconcilableBankFiles.map((f) => {
-                    const disabled = !f.selectedForReco && selectedBankFiles.length >= 3;
+                    const isChecked = f.selectedForReco !== false;
+                    const disabled = !isChecked && selectedBankFiles.length >= 3;
                     return (
                       <label key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: disabled ? shellColors.inkFaint : shellColors.ink, cursor: disabled ? "not-allowed" : "pointer" }}>
                         <input
                           type="checkbox"
-                          checked={!!f.selectedForReco}
+                          checked={isChecked}
                           disabled={disabled}
                           onChange={() => onToggleBankReco && onToggleBankReco(f.id)}
                         />

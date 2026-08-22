@@ -160,21 +160,54 @@ function AppShell() {
     setBankFiles((prev) => prev.map((f) => (f.id === id ? { ...f, monthLabel } : f)));
   };
 
+  const handleSetBankTolerance = (id, tolerance) => {
+    setBankFiles((prev) => prev.map((f) => (f.id === id ? { ...f, tolerance } : f)));
+  };
+
   const handleToggleBankReco = (id) => {
     setBankFiles((prev) => {
-      const selectedCount = prev.filter((f) => f.selectedForReco).length;
       return prev.map((f) => {
         if (f.id !== id) return f;
-        if (!f.selectedForReco && selectedCount >= 3) return f; // cap at 3
-        return { ...f, selectedForReco: !f.selectedForReco };
+        const currentSelected = f.selectedForReco !== false;
+        return { ...f, selectedForReco: !currentSelected };
       });
     });
   };
 
   const [pendingRecoRuns, setPendingRecoRuns] = useState(null);
   const handleRunReconciliationFromDashboard = (specs) => {
-    setPendingRecoRuns(specs);
-    setActive("reconciliation");
+    if (!sharedTransactions || !sharedTransactions.length || !specs || !specs.length) return;
+
+    const xeroAccounts = {};
+    sharedTransactions.forEach((t) => {
+      if (!t.account || !t.date) return;
+      if (!xeroAccounts[t.account]) xeroAccounts[t.account] = [];
+      xeroAccounts[t.account].push({ date: t.date, contact: t.vendor || t.description || "", amount: t.amount });
+    });
+
+    const runs = specs.map((spec) => {
+      const bf = bankFiles.find((f) => f.id === spec.bankFileId);
+      if (!bf || !bf.mapping) return null;
+      const accountTx = xeroAccounts[spec.account] || [];
+      if (!accountTx.length) return null;
+
+      const tolerance = spec.tolerance !== undefined ? Number(spec.tolerance) : (bf.tolerance !== undefined ? Number(bf.tolerance) : 3);
+      const allBankTx = buildBankTx(bf.rows, bf.mapping);
+      const xeroTx = filterByMonthWithBuffer(accountTx, spec.month, tolerance);
+      const bankTx = filterByMonthWithBuffer(allBankTx, spec.month, tolerance);
+      const results = reconcile(xeroTx, bankTx, tolerance);
+
+      const { start, end } = monthRange(spec.month);
+      const inMonth = (tx) => tx.date && tx.date >= start && tx.date <= end;
+      results.xeroOnly = results.xeroOnly.filter(inMonth);
+      results.bankOnly = results.bankOnly.filter(inMonth);
+
+      return { account: spec.account, month: spec.month, results };
+    }).filter(Boolean);
+
+    if (runs.length) {
+      setBankRecoSnapshot(runs);
+    }
   };
 
   const sharedTransactions = useMemo(() => {
@@ -236,7 +269,7 @@ function AppShell() {
       const year = yearsWithMonth[0];
       const month = `${year}-${String(targetMonth).padStart(2, "0")}`;
 
-      const tolerance = 3;
+      const tolerance = (bf.tolerance !== undefined && bf.tolerance !== null && bf.tolerance !== "") ? Number(bf.tolerance) : 3;
       const allBankTx = buildBankTx(bf.rows, bf.mapping);
       const xeroTx = filterByMonthWithBuffer(accountTx, month, tolerance);
       const bankTx = filterByMonthWithBuffer(allBankTx, month, tolerance);
@@ -477,6 +510,7 @@ function AppShell() {
             onUploadBank={handleBankUpload} onRemoveBank={handleRemoveBankFile}
             onEditBankMapping={(id) => setBankMapperOpenId(id)} onSetBankLabel={handleSetBankLabel}
             onSetBankMonth={handleSetBankMonth}
+            onSetBankTolerance={handleSetBankTolerance}
             onRunReport={() => setActive("dashboard")}
           />
         )}

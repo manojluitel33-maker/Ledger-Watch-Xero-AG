@@ -12,18 +12,11 @@ const MONTH_NAMES_FULL = ["January","February","March","April","May","June","Jul
 
 function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFiles, onToggleBankReco, onRunReconciliation }) {
   const { isMobile } = useViewport();
-  const [activeModules, setActiveModules] = useState(new Set(DASHBOARD_MODULES.map((m) => m.key)));
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [detailLevel, setDetailLevel] = useState("concise"); // "concise" | "detailed"
 
-  // Best-practice starting points for each module, chosen deliberately:
-  // - $1,000 materiality across the board (Ratio Consistency uses $5,000,
-  //   since it's gating on a dollar figure that also has to clear a
-  //   separate ratio threshold) — a rule-of-thumb for "worth a human
-  //   looking at it."
-  // - 3-month minimum history — the fewest data points needed to trust a
-  //   "usual" baseline before flagging deviations from it.
+  // Best-practice starting points for each module:
   const DEFAULT_REPORT_SETTINGS = {
     expense: { lowPct: 50, highPct: 150, patternEnabled: true, patternThresholdPct: 50, patternTolerancePct: 3, materialityThreshold: 1000 },
     duplicate: { thresholdPct: 70, minHistoryMonths: 3, materialityThreshold: 1000 },
@@ -31,23 +24,12 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
     ratio: { lowPct: 10, highPct: 400, minHistoryMonths: 3, materialityThreshold: 5000 },
   };
 
-  // One place to tune every module's thresholds for this report — separate
-  // from each live tool's own settings, which are untouched by this.
   const [reportSettings, setReportSettings] = useState(DEFAULT_REPORT_SETTINGS);
   const updateSetting = (module, key, value) => {
     setReportSettings((prev) => ({ ...prev, [module]: { ...prev[module], [key]: value } }));
   };
   const isCustomized = JSON.stringify(reportSettings) !== JSON.stringify(DEFAULT_REPORT_SETTINGS);
   const resetToDefaults = () => setReportSettings(DEFAULT_REPORT_SETTINGS);
-
-  const toggleModule = (key) => {
-    setActiveModules((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      if (next.size === 0) return new Set(DASHBOARD_MODULES.map((m) => m.key));
-      return next;
-    });
-  };
 
   const expenseObs = useMemo(() => {
     if (!transactions || !transactions.length) return [];
@@ -179,9 +161,9 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
   const timelineGroups = useMemo(() => {
     const filtered = selectedMonth === "all" ? allTimelineGroups : new Map([...allTimelineGroups.entries()].filter(([key]) => key === selectedMonth));
     return [...filtered.entries()]
-      .map(([key, g]) => [key, { label: g.label, items: g.items.filter((o) => activeModules.has(o.module)) }])
+      .map(([key, g]) => [key, { label: g.label, items: g.items }])
       .filter(([, g]) => g.items.length > 0);
-  }, [allTimelineGroups, selectedMonth, activeModules]);
+  }, [allTimelineGroups, selectedMonth]);
 
   const totalCount = timelineGroups.reduce((s, [, g]) => s + g.items.length, 0);
   const moduleColor = (key) => DASHBOARD_MODULES.find((m) => m.key === key)?.color || shellColors.inkMuted;
@@ -216,8 +198,8 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
       </div>
     `).join("");
 
-    const caveatHtml = (activeModules.has("reconciliation") && !bankRecoSnapshot)
-      ? `<div class="caveat">Run a Bank Reconciliation from Reports \u2192 Settings once bank statements are uploaded, mapped, and tagged in Shared Files.</div>`
+    const caveatHtml = !bankRecoSnapshot
+      ? `<div class="caveat">Upload and map bank statements in Shared Files to include Bank Reconciliation in the review notes.</div>`
       : "";
 
     const html = `<!DOCTYPE html>
@@ -476,26 +458,16 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
                 {monthOptions.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
               </select>
             </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {DASHBOARD_MODULES.map((m) => (
-                <button key={m.key} onClick={() => toggleModule(m.key)} style={{
-                  fontSize: 12.5, fontWeight: 600, padding: "6px 14px", borderRadius: 20, cursor: "pointer",
-                  border: `1px solid ${activeModules.has(m.key) ? m.color : shellColors.line}`,
-                  background: activeModules.has(m.key) ? m.color : "#fff",
-                  color: activeModules.has(m.key) ? "#fff" : shellColors.inkMuted,
-                }}>{m.label}</button>
-              ))}
-            </div>
           </div>
 
           <div style={{ background: "#fff", border: `1px solid ${shellColors.line}`, borderRadius: 12, padding: 16, marginBottom: 20 }}>
             <div style={{ fontSize: 26, fontWeight: 800, color: shellColors.accent }}>{totalCount}</div>
-            <div style={{ fontSize: 12.5, color: shellColors.inkMuted, marginTop: 4 }}>observations across the selected modules</div>
+            <div style={{ fontSize: 12.5, color: shellColors.inkMuted, marginTop: 4 }}>total observations across all audit modules</div>
           </div>
 
           {totalCount === 0 && (
             <div style={{ background: "#fff", border: `1px solid ${shellColors.line}`, borderRadius: 12, padding: 32, textAlign: "center", color: shellColors.inkMuted, fontSize: 13 }}>
-              Nothing to report for the selected modules.
+              Nothing to report for the selected period.
             </div>
           )}
 

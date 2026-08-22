@@ -1,27 +1,42 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Settings, X, ArrowRight, Landmark, FileText, Check, AlertTriangle } from "lucide-react";
+import { Settings, X, ArrowRight, Landmark, FileText, Check, AlertTriangle, RefreshCw } from "lucide-react";
 import { shellColors } from "../../constants/theme";
 import { DASHBOARD_MODULES } from "../../constants/tools";
 import { ExpenseConsistencyAuditTool } from "../tools/expense-audit";
 import { DuplicateTransactionAuditTool } from "../tools/duplicate-audit";
 import { VendorExceptionFlaggerTool } from "../tools/vendor-exceptions";
+import { RatioConsistencyAuditTool } from "../tools/ratio-audit";
+
+const MONTH_NAMES_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFiles, onToggleBankReco, onRunReconciliation }) {
   const [activeModules, setActiveModules] = useState(new Set(DASHBOARD_MODULES.map((m) => m.key)));
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const MONTH_NAMES_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const [detailLevel, setDetailLevel] = useState("concise"); // "concise" | "detailed"
+
+  // Best-practice starting points for each module, chosen deliberately:
+  // - $1,000 materiality across the board (Ratio Consistency uses $5,000,
+  //   since it's gating on a dollar figure that also has to clear a
+  //   separate ratio threshold) — a rule-of-thumb for "worth a human
+  //   looking at it."
+  // - 3-month minimum history — the fewest data points needed to trust a
+  //   "usual" baseline before flagging deviations from it.
+  const DEFAULT_REPORT_SETTINGS = {
+    expense: { lowPct: 50, highPct: 150, patternEnabled: true, patternThresholdPct: 50, patternTolerancePct: 3, materialityThreshold: 1000 },
+    duplicate: { thresholdPct: 70, minHistoryMonths: 3, materialityThreshold: 1000 },
+    vendor: { dualCategoryThresholdPct: 30, materialityThreshold: 1000 },
+    ratio: { lowPct: 10, highPct: 400, minHistoryMonths: 3, materialityThreshold: 5000 },
+  };
 
   // One place to tune every module's thresholds for this report — separate
   // from each live tool's own settings, which are untouched by this.
-  const [reportSettings, setReportSettings] = useState({
-    expense: { lowPct: 50, highPct: 150, patternEnabled: true, patternThresholdPct: 50, patternTolerancePct: 3, materialityThreshold: 1000 },
-    duplicate: { thresholdPct: 80, minHistoryMonths: 3, materialityThreshold: 1000 },
-    vendor: { dualCategoryThresholdPct: 30, materialityThreshold: 1000 },
-  });
+  const [reportSettings, setReportSettings] = useState(DEFAULT_REPORT_SETTINGS);
   const updateSetting = (module, key, value) => {
     setReportSettings((prev) => ({ ...prev, [module]: { ...prev[module], [key]: value } }));
   };
+  const isCustomized = JSON.stringify(reportSettings) !== JSON.stringify(DEFAULT_REPORT_SETTINGS);
+  const resetToDefaults = () => setReportSettings(DEFAULT_REPORT_SETTINGS);
 
   const toggleModule = (key) => {
     setActiveModules((prev) => {
@@ -47,24 +62,51 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
     try { return VendorExceptionFlaggerTool.getObservations(transactions, coaAccounts, reportSettings.vendor); } catch (e) { return []; }
   }, [transactions, coaAccounts, reportSettings.vendor]);
 
+  const ratioObs = useMemo(() => {
+    if (!transactions || !transactions.length) return [];
+    try { return RatioConsistencyAuditTool.getObservations(transactions, coaAccounts, reportSettings.ratio); } catch (e) { return []; }
+  }, [transactions, coaAccounts, reportSettings.ratio]);
+
   const reconciliationObs = useMemo(() => {
     if (!bankRecoSnapshot || !bankRecoSnapshot.length) return [];
+    const fmt$ = (n) => "$" + Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
     const obs = [];
     bankRecoSnapshot.forEach((run) => {
       const { results, account, month } = run;
       if (!results) return;
       const monthLbl = month ? `${MONTH_NAMES_FULL[Number(month.split("-")[1]) - 1]} ${month.split("-")[0]}` : "the reconciled period";
-      if (results.possible?.length) obs.push({ module: "reconciliation", monthKey: month, monthLabelStr: monthLbl, text: `${account} — ${results.possible.length} item${results.possible.length === 1 ? "" : "s"} in ${monthLbl} matched on amount but not date; needs review.` });
-      if (results.xeroOnly?.length) obs.push({ module: "reconciliation", monthKey: month, monthLabelStr: monthLbl, text: `${account} — ${results.xeroOnly.length} entr${results.xeroOnly.length === 1 ? "y" : "ies"} booked in Xero for ${monthLbl} not yet reflected in the bank.` });
-      if (results.bankOnly?.length) obs.push({ module: "reconciliation", monthKey: month, monthLabelStr: monthLbl, text: `${account} — ${results.bankOnly.length} bank item${results.bankOnly.length === 1 ? "" : "s"} for ${monthLbl} not yet recorded in Xero.` });
+      if (results.possible?.length) {
+        const sum = results.possible.reduce((s, m) => s + Math.abs(m.xero.amount), 0);
+        obs.push({ module: "reconciliation", monthKey: month, monthLabelStr: monthLbl, title: "Date Mismatch",
+          issue: `${results.possible.length} item${results.possible.length === 1 ? "" : "s"} on ${account} matched on amount but not date this month.`,
+          recommendation: "Worth a quick review.",
+          detailedIssue: `${results.possible.length} item${results.possible.length === 1 ? "" : "s"} on ${account} matched on amount but not date this month, totaling ${fmt$(sum)}.`,
+          detailedRecommendation: "Worth a quick review — a payment posted a day or two off from the bank clearing date would explain it." });
+      }
+      if (results.xeroOnly?.length) {
+        const sum = results.xeroOnly.reduce((s, t) => s + Math.abs(t.amount), 0);
+        obs.push({ module: "reconciliation", monthKey: month, monthLabelStr: monthLbl, title: "Missing From Bank",
+          issue: `${results.xeroOnly.length} entr${results.xeroOnly.length === 1 ? "y" : "ies"} booked in Xero for ${account} ${results.xeroOnly.length === 1 ? "hasn't" : "haven't"} shown up in the bank yet.`,
+          recommendation: "Worth confirming those payments actually cleared.",
+          detailedIssue: `${results.xeroOnly.length} entr${results.xeroOnly.length === 1 ? "y" : "ies"} booked in Xero for ${account} ${results.xeroOnly.length === 1 ? "hasn't" : "haven't"} shown up in the bank yet, totaling ${fmt$(sum)}.`,
+          detailedRecommendation: "Worth confirming those payments actually cleared, especially the larger ones." });
+      }
+      if (results.bankOnly?.length) {
+        const sum = results.bankOnly.reduce((s, t) => s + Math.abs(t.amount), 0);
+        obs.push({ module: "reconciliation", monthKey: month, monthLabelStr: monthLbl, title: "Not Recorded in Xero",
+          issue: `${results.bankOnly.length} item${results.bankOnly.length === 1 ? "" : "s"} on the ${account} bank statement ${results.bankOnly.length === 1 ? "hasn't" : "haven't"} made it into Xero yet.`,
+          recommendation: "Worth booking those entries.",
+          detailedIssue: `${results.bankOnly.length} item${results.bankOnly.length === 1 ? "" : "s"} on the ${account} bank statement ${results.bankOnly.length === 1 ? "hasn't" : "haven't"} made it into Xero yet, totaling ${fmt$(sum)}.`,
+          detailedRecommendation: "Worth booking those entries so the account stays reconciled." });
+      }
     });
     return obs;
   }, [bankRecoSnapshot]);
 
-  // Duplicate + Vendor + Reconciliation carry real YYYY-MM dates — group
-  // them into one timeline, independent of which modules are toggled on,
-  // so the month dropdown's option list doesn't shrink/reorder as you
-  // toggle modules.
+  // Duplicate + Vendor + Reconciliation + Ratio carry real YYYY-MM dates —
+  // group them into one timeline, independent of which modules are
+  // toggled on, so the month dropdown's option list doesn't shrink/reorder
+  // as you toggle modules.
   const allTimelineGroups = useMemo(() => {
     const groups = new Map(); // key "YYYY-MM" -> { label, items: [] }
     const addAll = (list, moduleKey) => {
@@ -86,8 +128,9 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
     addAll(duplicateObs, "duplicate");
     addAll(vendorObs, "vendor");
     addAll(reconciliationObs, "reconciliation");
+    addAll(ratioObs, "ratio");
     return new Map([...groups.entries()].sort((a, b) => b[0].localeCompare(a[0])));
-  }, [expenseObs, duplicateObs, vendorObs, reconciliationObs]);
+  }, [expenseObs, duplicateObs, vendorObs, reconciliationObs, ratioObs]);
 
   const monthOptions = useMemo(() => [...allTimelineGroups.entries()].map(([key, g]) => ({ key, label: g.label })), [allTimelineGroups]);
 
@@ -148,7 +191,7 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
   // Minimalist, narrative-style export — reads like a short memo of
   // observations, not a data table or dashboard. Builds a plain print
   // document and hands off to the browser's own print-to-PDF, so no
-  // PDF library is needed at all.
+  // PDF library is needed at all. Respects the Concise/Detailed toggle.
   const exportPDF = () => {
     const dateStr = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     const periodStr = selectedMonth === "all" ? "all recorded months" : (monthOptions.find((m) => m.key === selectedMonth)?.label || "the selected period");
@@ -159,12 +202,20 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
     const sectionsHtml = timelineGroups.map(([key, group]) => `
       <div class="month">
         <div class="month-label">${escapeHtml(group.label)}</div>
-        ${group.items.map((o) => `<div class="obs"><span class="mod">${escapeHtml(moduleLabel(o.module))}</span> — ${escapeHtml(o.text)}</div>`).join("")}
+        ${group.items.map((o) => {
+          const rec = (detailLevel === "detailed" && o.detailedRecommendation) || o.recommendation || "";
+          if (detailLevel === "detailed" && Array.isArray(o.detailedIssue)) {
+            const paras = o.detailedIssue.map((p) => `<div class="obs-para">${escapeHtml(p)}</div>`).join("");
+            return `<div class="obs"><span class="mod">${escapeHtml(moduleLabel(o.module))}</span> — <b>${escapeHtml(o.title || "")}</b>${paras}${rec ? `<div class="obs-para">${escapeHtml(rec)}</div>` : ""}</div>`;
+          }
+          const issue = (detailLevel === "detailed" && o.detailedIssue) || o.issue || o.text || "";
+          return `<div class="obs"><span class="mod">${escapeHtml(moduleLabel(o.module))}</span> — <b>${escapeHtml(o.title || "")}</b>: ${escapeHtml(issue)}${rec ? ` ${escapeHtml(rec)}` : ""}</div>`;
+        }).join("")}
       </div>
     `).join("");
 
     const caveatHtml = (activeModules.has("reconciliation") && !bankRecoSnapshot)
-      ? `<div class="caveat">Bank Reconciliation requires its own statement upload and isn't reflected above.</div>`
+      ? `<div class="caveat">Run a Bank Reconciliation from Reports \u2192 Settings once bank statements are uploaded, mapped, and tagged in Shared Files.</div>`
       : "";
 
     const html = `<!DOCTYPE html>
@@ -184,6 +235,7 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
   .month-label { font-weight: 700; font-size: 14.5px; margin-bottom: 8px; }
   .obs { font-size: 13px; line-height: 1.65; margin-bottom: 7px; padding-left: 14px; position: relative; }
   .obs::before { content: "\\2013"; position: absolute; left: 0; }
+  .obs-para { margin-top: 4px; }
   .mod { font-weight: 600; }
   .caveat { font-style: italic; font-size: 11px; color: #9a9a9a; margin-top: 22px; }
   .empty { font-size: 13px; color: #7a7a7a; }
@@ -218,7 +270,23 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
           <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, letterSpacing: "-0.02em", color: shellColors.ink }}>Reports</h1>
         </div>
         {transactions && transactions.length > 0 && (
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ display: "flex", border: `1px solid ${shellColors.line}`, borderRadius: 20, padding: 2, background: "#fff" }}>
+              {["concise", "detailed"].map((lvl) => (
+                <button
+                  key={lvl}
+                  onClick={() => setDetailLevel(lvl)}
+                  style={{
+                    fontSize: 12.5, fontWeight: 700, padding: "6px 14px", borderRadius: 18, border: "none", cursor: "pointer",
+                    background: detailLevel === lvl ? shellColors.accent : "transparent",
+                    color: detailLevel === lvl ? "#fff" : shellColors.inkMuted,
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {lvl}
+                </button>
+              ))}
+            </div>
             <button
               onClick={exportPDF}
               style={{ display: "flex", alignItems: "center", gap: 6, background: shellColors.accent, border: `1px solid ${shellColors.accent}`, borderRadius: 20, padding: "8px 16px", cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#fff" }}
@@ -235,7 +303,7 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
         )}
       </div>
       <p style={{ color: shellColors.inkMuted, fontSize: 14, marginTop: 6, marginBottom: 20, maxWidth: 620 }}>
-        Every observation from all four tools, using each tool's own default settings — a quick read before diving into any one of them.
+        Every observation from all five tools, using each tool's own default settings — a quick read before diving into any one of them.
       </p>
 
       {settingsOpen && (
@@ -248,9 +316,20 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
               <div style={{ fontWeight: 800, fontSize: 16 }}>Report settings</div>
               <button onClick={() => setSettingsOpen(false)} style={{ border: "none", background: "none", cursor: "pointer" }}><X size={18} /></button>
             </div>
-            <div style={{ fontSize: 11.5, color: shellColors.inkFaint, marginBottom: 20 }}>
+            <div style={{ fontSize: 11.5, color: shellColors.inkFaint, marginBottom: 10 }}>
               These only affect what shows up in Reports — each tool keeps its own independent settings when you open it directly.
             </div>
+            <button
+              onClick={resetToDefaults}
+              disabled={!isCustomized}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, marginBottom: 20,
+                background: "none", border: `1px solid ${shellColors.line}`, borderRadius: 8, padding: "6px 12px",
+                cursor: isCustomized ? "pointer" : "not-allowed", color: isCustomized ? shellColors.accent : shellColors.inkFaint,
+              }}
+            >
+              <RefreshCw size={12} /> Reset to default settings
+            </button>
 
             <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 10, color: moduleColor("expense") }}>Expense Checker</div>
             <div style={{ marginBottom: 14 }}>
@@ -272,6 +351,7 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
               <select value={reportSettings.duplicate.thresholdPct} onChange={(e) => updateSetting("duplicate", "thresholdPct", Number(e.target.value))} style={{ border: `1px solid ${shellColors.line}`, borderRadius: 8, padding: "7px 10px", fontSize: 13.5, width: "100%" }}>
                 <option value={100}>100%</option>
                 <option value={80}>80%</option>
+                <option value={70}>70%</option>
                 <option value={60}>60%</option>
                 <option value={50}>50%</option>
               </select>
@@ -290,9 +370,27 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
               <label style={{ fontSize: 11, fontWeight: 700, color: shellColors.inkMuted, textTransform: "uppercase", marginBottom: 4, display: "block" }}>Split-vendor tolerance — {reportSettings.vendor.dualCategoryThresholdPct}%</label>
               <input type="range" min={15} max={45} step={5} value={reportSettings.vendor.dualCategoryThresholdPct} onChange={(e) => updateSetting("vendor", "dualCategoryThresholdPct", Number(e.target.value))} style={{ width: "100%" }} />
             </div>
-            <div>
+            <div style={{ marginBottom: 20 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: shellColors.inkMuted, textTransform: "uppercase", marginBottom: 4, display: "block" }}>Materiality — ${reportSettings.vendor.materialityThreshold.toLocaleString()}</label>
               <input type="range" min={500} max={10000} step={250} value={reportSettings.vendor.materialityThreshold} onChange={(e) => updateSetting("vendor", "materialityThreshold", Number(e.target.value))} style={{ width: "100%" }} />
+            </div>
+
+            <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 10, color: moduleColor("ratio") }}>Ratio Consistency Audit</div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: shellColors.inkMuted, textTransform: "uppercase", marginBottom: 4, display: "block" }}>Low threshold — {reportSettings.ratio.lowPct}%</label>
+              <input type="range" min={10} max={90} value={reportSettings.ratio.lowPct} onChange={(e) => updateSetting("ratio", "lowPct", Number(e.target.value))} style={{ width: "100%" }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: shellColors.inkMuted, textTransform: "uppercase", marginBottom: 4, display: "block" }}>High threshold — {reportSettings.ratio.highPct}%</label>
+              <input type="range" min={110} max={400} value={reportSettings.ratio.highPct} onChange={(e) => updateSetting("ratio", "highPct", Number(e.target.value))} style={{ width: "100%" }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: shellColors.inkMuted, textTransform: "uppercase", marginBottom: 4, display: "block" }}>Minimum history — {reportSettings.ratio.minHistoryMonths} months</label>
+              <input type="range" min={1} max={6} value={reportSettings.ratio.minHistoryMonths} onChange={(e) => updateSetting("ratio", "minHistoryMonths", Number(e.target.value))} style={{ width: "100%" }} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: shellColors.inkMuted, textTransform: "uppercase", marginBottom: 4, display: "block" }}>Materiality — ${reportSettings.ratio.materialityThreshold.toLocaleString()}</label>
+              <input type="range" min={500} max={10000} step={250} value={reportSettings.ratio.materialityThreshold} onChange={(e) => updateSetting("ratio", "materialityThreshold", Number(e.target.value))} style={{ width: "100%" }} />
             </div>
 
             {reconcilableBankFiles.length > 0 && (
@@ -356,7 +454,6 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
         </div>
       )}
 
-
       {(!transactions || !transactions.length) ? (
         <div style={{ background: "#fff", border: `1px solid ${shellColors.line}`, borderRadius: 12, padding: 40, textAlign: "center" }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>No shared file loaded yet</div>
@@ -402,16 +499,39 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
           {timelineGroups.length > 0 && (
             <div style={{ marginBottom: 24 }}>
               {timelineGroups.map(([key, group]) => (
-                <div key={key} style={{ background: "#fff", border: `1px solid ${shellColors.line}`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 10 }}>{group.label}</div>
-                  {group.items.map((o, i) => (
-                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, padding: "6px 0", borderTop: i > 0 ? `1px solid ${shellColors.line}` : "none" }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: moduleColor(o.module), background: shellColors.bg, border: `1px solid ${moduleColor(o.module)}`, borderRadius: 10, padding: "2px 7px", flexShrink: 0, marginTop: 1, whiteSpace: "nowrap" }}>
-                        {moduleLabel(o.module)}
-                      </span>
-                      <span style={{ color: shellColors.ink }}>{o.text}</span>
-                    </div>
-                  ))}
+                <div key={key} style={{ background: "#fff", border: `1px solid ${shellColors.line}`, borderRadius: 12, padding: 0, marginBottom: 12, overflow: "hidden" }}>
+                  <div style={{ fontWeight: 700, fontSize: 14.5, padding: "14px 16px", borderBottom: `1px solid ${shellColors.line}` }}>{group.label}</div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: shellColors.bg }}>
+                        <th style={{ textAlign: "left", padding: "8px 16px", fontSize: 10.5, textTransform: "uppercase", color: shellColors.inkFaint, fontWeight: 700, width: "18%" }}>Title</th>
+                        <th style={{ textAlign: "left", padding: "8px 16px", fontSize: 10.5, textTransform: "uppercase", color: shellColors.inkFaint, fontWeight: 700, width: "52%" }}>Issue</th>
+                        <th style={{ textAlign: "left", padding: "8px 16px", fontSize: 10.5, textTransform: "uppercase", color: shellColors.inkFaint, fontWeight: 700, width: "30%" }}>Recommendation</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.items.map((o, i) => (
+                        <tr key={i} style={{ borderTop: `1px solid ${shellColors.line}` }}>
+                          <td style={{ padding: "10px 16px", verticalAlign: "top" }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: moduleColor(o.module), background: shellColors.bg, border: `1px solid ${moduleColor(o.module)}`, borderRadius: 10, padding: "2px 7px", whiteSpace: "nowrap", display: "inline-block", marginBottom: 4 }}>
+                              {moduleLabel(o.module)}
+                            </span>
+                            <div style={{ fontWeight: 700, color: shellColors.ink }}>{o.title || moduleLabel(o.module)}</div>
+                          </td>
+                          <td style={{ padding: "10px 16px", verticalAlign: "top", color: shellColors.ink }}>
+                            {detailLevel === "detailed" && Array.isArray(o.detailedIssue) ? (
+                              o.detailedIssue.map((para, pi) => (
+                                <div key={pi} style={{ marginBottom: pi < o.detailedIssue.length - 1 ? 8 : 0 }}>{para}</div>
+                              ))
+                            ) : (
+                              (detailLevel === "detailed" && o.detailedIssue) || o.issue || o.text
+                            )}
+                          </td>
+                          <td style={{ padding: "10px 16px", verticalAlign: "top", color: shellColors.inkMuted }}>{(detailLevel === "detailed" && o.detailedRecommendation) || o.recommendation || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               ))}
             </div>
@@ -419,7 +539,7 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
 
           {activeModules.has("reconciliation") && !bankRecoSnapshot && (
             <div style={{ fontSize: 12, color: shellColors.inkFaint, marginTop: 12 }}>
-              Bank Reconciliation needs its own bank statement upload, so it isn't included here yet — visit that tool and run a reconciliation to bring its findings into this dashboard.
+              Bank Reconciliation isn't run automatically — go to <b>Settings</b> above to pick up to 3 tagged bank statements and run a reconciliation.
             </div>
           )}
         </>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Upload, ChevronRight, Settings, X } from "lucide-react";
+import useViewport from "../../../hooks/useViewport";
 
 
 /* ============================================================
@@ -130,7 +131,7 @@ function Ledger({ title, tag, results, noHistory, nounSingular, months, selected
             <div key={res.key} style={{ borderBottom: i < results.length - 1 ? `1px solid ${colors.lineSoft}` : "none" }}>
               <div
                 onClick={() => setOpenIdx(openIdx === i ? null : i)}
-                style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", cursor: "pointer", background: colors.panel }}
+                style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", cursor: "pointer", background: colors.panel, flexWrap: "wrap" }}
               >
                 <ChevronRight size={13} style={{ transform: openIdx === i ? "rotate(90deg)" : "none", transition: "transform .12s", color: colors.inkFaint, flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 160 }}>
@@ -215,6 +216,7 @@ function duplicateSentence(res, kind) {
 }
 
 function DuplicateTransactionAudit({ transactions }) {
+  const { isMobile } = useViewport();
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [threshold, setThreshold] = useState(70);
   const [minHistoryMonths, setMinHistoryMonths] = useState(3);
@@ -248,7 +250,7 @@ function DuplicateTransactionAudit({ transactions }) {
   }, [dataset, selectedMonth, vendorRes, accountRes]);
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, padding: isMobile ? "20px 12px" : styles.page.padding }}>
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ marginBottom: 24, borderBottom: `1px solid ${colors.line}`, paddingBottom: 18, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
           <div>

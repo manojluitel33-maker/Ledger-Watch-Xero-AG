@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Upload, ChevronDown, ChevronRight, Search, Settings, X } from "lucide-react";
+import useViewport from "../../../hooks/useViewport";
 
 const colors = {
   bg: "#F8FAFC", panel: "#FFFFFF", panel2: "#FAFBFC",
@@ -156,6 +157,7 @@ const FLAG_STYLES = {
 const FLAG_ORDER = { missing: 0, spike: 1, pattern: 2, low: 3 };
 
 function ExpenseConsistencyAudit({ transactions, coaAccounts }) {
+  const { isMobile } = useViewport();
   const accounts = useMemo(() => accountsFromTransactions(transactions, coaAccounts), [transactions, coaAccounts]);
   const allMonthKeys = useMemo(() => getGlobalMonthKeys(accounts), [accounts]);
 
@@ -248,7 +250,7 @@ function ExpenseConsistencyAudit({ transactions, coaAccounts }) {
   };
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, padding: isMobile ? "20px 12px" : styles.page.padding }}>
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ marginBottom: 24, borderBottom: `1px solid ${colors.line}`, paddingBottom: 18, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
           <div>

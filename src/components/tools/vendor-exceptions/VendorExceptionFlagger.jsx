@@ -3,6 +3,7 @@ import {
   Upload, ChevronDown, ChevronRight, Search, Settings, X, Check,
   AlertTriangle, Save, History, Trash2,
 } from "lucide-react";
+import useViewport from "../../../hooks/useViewport";
 
 
 /* ============================================================
@@ -246,6 +247,7 @@ function formatCategories(vd) {
 }
 
 function VendorExceptionFlagger({ transactions, coaAccounts }) {
+  const { isMobile } = useViewport();
   const [coaOverrides, setCoaOverrides] = useState({});
   const [coaIncludeOverrides, setCoaIncludeOverrides] = useState({});
   const [materialityThreshold, setMaterialityThreshold] = useState(1000);
@@ -464,7 +466,7 @@ function VendorExceptionFlagger({ transactions, coaAccounts }) {
   };
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, padding: isMobile ? "20px 12px" : styles.page.padding }}>
       <div style={{ maxWidth: 1140, margin: "0 auto" }}>
         <div style={{ marginBottom: 24, borderBottom: `1px solid ${colors.line}`, paddingBottom: 18, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
           <div>
@@ -650,7 +652,8 @@ function VendorExceptionFlagger({ transactions, coaAccounts }) {
                   <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search vendor…" style={{ border: "none", outline: "none", fontSize: 13, width: 160 }} />
                 </div>
               </div>
-              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 560, fontSize: 12.5 }}>
                 <thead>
                   <tr>
                     <th style={{ width: 24, padding: "10px 12px", background: colors.panel2, borderBottom: `1px solid ${colors.line}` }} />
@@ -709,7 +712,8 @@ function VendorExceptionFlagger({ transactions, coaAccounts }) {
                     );
                   })}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
 
             <div style={{ background: colors.panel, border: `1px solid ${colors.line}`, borderRadius: 12, overflow: "hidden" }}>

@@ -6,10 +6,12 @@ import { ExpenseConsistencyAuditTool } from "../tools/expense-audit";
 import { DuplicateTransactionAuditTool } from "../tools/duplicate-audit";
 import { VendorExceptionFlaggerTool } from "../tools/vendor-exceptions";
 import { RatioConsistencyAuditTool } from "../tools/ratio-audit";
+import useViewport from "../../hooks/useViewport";
 
 const MONTH_NAMES_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFiles, onToggleBankReco, onRunReconciliation }) {
+  const { isMobile } = useViewport();
   const [activeModules, setActiveModules] = useState(new Set(DASHBOARD_MODULES.map((m) => m.key)));
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -264,7 +266,7 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
   };
 
   return (
-    <div style={{ padding: "32px 36px", maxWidth: 900 }}>
+    <div style={{ padding: isMobile ? "20px 16px" : "32px 36px", maxWidth: 900 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap", marginBottom: 6 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, letterSpacing: "-0.02em", color: shellColors.ink }}>Reports</h1>
@@ -501,7 +503,8 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
               {timelineGroups.map(([key, group]) => (
                 <div key={key} style={{ background: "#fff", border: `1px solid ${shellColors.line}`, borderRadius: 12, padding: 0, marginBottom: 12, overflow: "hidden" }}>
                   <div style={{ fontWeight: 700, fontSize: 14.5, padding: "14px 16px", borderBottom: `1px solid ${shellColors.line}` }}>{group.label}</div>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", minWidth: 640, borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: shellColors.bg }}>
                         <th style={{ textAlign: "left", padding: "8px 16px", fontSize: 10.5, textTransform: "uppercase", color: shellColors.inkFaint, fontWeight: 700, width: "18%" }}>Title</th>
@@ -532,6 +535,7 @@ function DashboardScreen({ transactions, coaAccounts, bankRecoSnapshot, bankFile
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               ))}
             </div>

@@ -3,8 +3,10 @@ import { X } from "lucide-react";
 import { shellColors } from "../../constants/theme";
 import { COA_FIELDS } from "../../constants/tools";
 import { guessCoaHeaderRow } from "../../utils/fileUtils";
+import useViewport from "../../hooks/useViewport";
 
 function CoaColumnMapper({ rows, fileName, initialMapping, onConfirm, onCancel }) {
+  const { isMobile } = useViewport();
   const [headerRowIdx, setHeaderRowIdx] = useState(() => initialMapping?.headerRowIdx ?? guessCoaHeaderRow(rows));
   const headerRow = (rows[headerRowIdx] || []).map((h) => (h == null ? "" : String(h).trim()));
   const cols = headerRow.filter(Boolean);
@@ -18,8 +20,8 @@ function CoaColumnMapper({ rows, fileName, initialMapping, onConfirm, onCancel }
   const blocked = !mapping.name || !mapping.type;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,27,45,.4)", zIndex: 90, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
-      <div style={{ background: "#fff", borderRadius: 12, border: `1px solid ${shellColors.line}`, padding: 22, maxWidth: 560, width: "100%" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,27,45,.4)", zIndex: 90, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isMobile ? "16px 10px" : "40px 16px", overflowY: "auto" }}>
+      <div style={{ background: "#fff", borderRadius: 12, border: `1px solid ${shellColors.line}`, padding: isMobile ? 16 : 22, maxWidth: 560, width: "100%" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
           <div style={{ fontWeight: 800, fontSize: 16 }}>Map your Chart of Accounts columns</div>
           <button onClick={onCancel} style={{ border: "none", background: "none", cursor: "pointer", color: shellColors.inkFaint }}><X size={18} /></button>

@@ -3,12 +3,13 @@ import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import {
   Upload, Database, Table2, LayoutDashboard, Landmark, LogOut, User,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Menu,
 } from "lucide-react";
 
 import { shellColors } from "../../constants/theme";
 import { TOOLS } from "../../constants/tools";
 import { useAuth } from "../../context/AuthContext";
+import useViewport from "../../hooks/useViewport";
 import {
   guessHeaderRowUniversal,
   guessCoaHeaderRow,
@@ -31,8 +32,10 @@ import DashboardScreen from "../dashboard/DashboardScreen";
 
 function AppShell() {
   const { user, signOut } = useAuth();
+  const { isMobile } = useViewport();
   const [active, setActive] = useState("sharedfiles");
   const [toolsOpen, setToolsOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [sharedFile, setSharedFile] = useState(null); // { fileName, rawRows }
   const [sharedMapping, setSharedMapping] = useState(null); // { mapping, headerRowIdx, dateFormatPref }
@@ -255,7 +258,10 @@ function AppShell() {
 
   const NavButton = ({ toolKey, label, Icon, indent }) => (
     <button
-      onClick={() => setActive(toolKey)}
+      onClick={() => {
+        setActive(toolKey);
+        if (isMobile) setMenuOpen(false);
+      }}
       style={{
         display: "flex", alignItems: "center", gap: 10, width: "100%",
         padding: indent ? "8px 14px 8px 26px" : "9px 14px", borderRadius: 8, border: "none", cursor: "pointer",
@@ -271,6 +277,14 @@ function AppShell() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "'Inter', system-ui, sans-serif", background: shellColors.bg }}>
+      {/* Mobile backdrop */}
+      {isMobile && menuOpen && (
+        <div
+          onClick={() => setMenuOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(15,27,45,.4)", zIndex: 55 }}
+        />
+      )}
+
       {/* Sidebar */}
       <div
         style={{
@@ -279,8 +293,18 @@ function AppShell() {
           borderRight: `1px solid ${shellColors.line}`,
           background: "#fff",
           padding: "20px 14px 16px",
-          position: "sticky",
-          top: 0,
+          ...(isMobile
+            ? {
+                position: "fixed",
+                top: 0,
+                left: 0,
+                bottom: 0,
+                zIndex: 60,
+                transform: menuOpen ? "translateX(0)" : "translateX(-100%)",
+                transition: "transform 0.2s ease",
+                boxShadow: menuOpen ? "0 10px 30px rgba(15,27,45,.25)" : "none",
+              }
+            : { position: "sticky", top: 0 }),
           height: "100vh",
           display: "flex",
           flexDirection: "column",
@@ -407,7 +431,42 @@ function AppShell() {
       </div>
 
       {/* Main content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        {isMobile && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 14px",
+              borderBottom: `1px solid ${shellColors.line}`,
+              background: "#fff",
+              position: "sticky",
+              top: 0,
+              zIndex: 40,
+            }}
+          >
+            <button
+              onClick={() => setMenuOpen(true)}
+              aria-label="Open menu"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: `1px solid ${shellColors.line}`,
+                background: "#fff",
+                borderRadius: 8,
+                padding: 7,
+                cursor: "pointer",
+                color: shellColors.ink,
+              }}
+            >
+              <Menu size={16} />
+            </button>
+            <div style={{ fontWeight: 800, fontSize: 14, color: shellColors.ink }}>Ledger Watch</div>
+          </div>
+        )}
+        <div style={{ flex: 1 }}>
         {active === "sharedfiles" && (
           <SharedFilesScreen
             sharedFile={sharedFile} sharedMapping={sharedMapping} fileError={fileError}
@@ -442,6 +501,7 @@ function AppShell() {
         )}
         {active === "vendor" && <VendorExceptionFlaggerTool.Component transactions={sharedTransactions} coaAccounts={sharedCoaAccounts} />}
         {active === "ratio" && <RatioConsistencyAuditTool.Component transactions={sharedTransactions} coaAccounts={sharedCoaAccounts} />}
+        </div>
       </div>
 
       {mapperOpen && sharedFile && (

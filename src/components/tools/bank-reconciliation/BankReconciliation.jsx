@@ -970,6 +970,8 @@ function BankReconciliation({ transactions, onResultsChange, bankFiles, onGoToSh
         }
         @media (max-width: 760px) {
           .summary-grid { grid-template-columns: repeat(2, 1fr); }
+          .wrap { padding: 20px 12px 48px; }
+          .search-box input { width: 110px; }
         }
         .sum-card {
           border-radius: 10px;

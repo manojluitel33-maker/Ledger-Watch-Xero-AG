@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Upload, ChevronDown, ChevronRight, Search, Settings, X, Check, AlertTriangle, FileText } from "lucide-react";
+import useViewport from "../../../hooks/useViewport";
 
 const colors = {
   bg: "#F8FAFC", panel: "#FFFFFF", panel2: "#FAFBFC",
@@ -137,6 +138,7 @@ const FLAG_STYLES = {
 const FLAG_ORDER = { missing: 0, spike: 1, low: 2 };
 
 function RatioConsistencyAudit({ transactions, coaAccounts }) {
+  const { isMobile } = useViewport();
   const accounts = useMemo(() => accountsFromTransactions(transactions, coaAccounts), [transactions, coaAccounts]);
   const monthKeys = useMemo(() => getGlobalMonthKeys(accounts), [accounts]);
   const sales = useMemo(() => salesByMonth(accounts, monthKeys), [accounts, monthKeys]);
@@ -171,7 +173,7 @@ function RatioConsistencyAudit({ transactions, coaAccounts }) {
   const latestMonth = monthKeys[monthKeys.length - 1];
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, padding: isMobile ? "20px 12px" : styles.page.padding }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
         <div>
           <div style={styles.eyebrow}>RATIO CONSISTENCY AUDIT</div>
@@ -230,7 +232,8 @@ function RatioConsistencyAudit({ transactions, coaAccounts }) {
           </div>
 
           <div style={{ ...styles.card, padding: 0, overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 620, borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: colors.panel2 }}>
                   <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, textTransform: "uppercase", color: colors.inkFaint }}>Expense account</th>
@@ -299,6 +302,7 @@ function RatioConsistencyAudit({ transactions, coaAccounts }) {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}

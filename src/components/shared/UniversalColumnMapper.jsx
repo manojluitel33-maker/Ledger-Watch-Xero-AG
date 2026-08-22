@@ -3,8 +3,10 @@ import { X } from "lucide-react";
 import { shellColors } from "../../constants/theme";
 import { UNIVERSAL_FIELDS } from "../../constants/tools";
 import { guessHeaderRowUniversal } from "../../utils/fileUtils";
+import useViewport from "../../hooks/useViewport";
 
 function UniversalColumnMapper({ rows, fileName, initialMapping, onConfirm, onCancel }) {
+  const { isMobile } = useViewport();
   const [headerRowIdx, setHeaderRowIdx] = useState(() => initialMapping?.headerRowIdx ?? guessHeaderRowUniversal(rows));
   const headerRow = rows[headerRowIdx] || [];
   const columns = useMemo(() => {
@@ -31,8 +33,8 @@ function UniversalColumnMapper({ rows, fileName, initialMapping, onConfirm, onCa
   const missingRequired = UNIVERSAL_FIELDS.filter((f) => f.required && (mapping[f.key] == null || mapping[f.key] < 0));
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,27,45,.4)", zIndex: 90, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
-      <div style={{ background: "#fff", borderRadius: 12, border: `1px solid ${shellColors.line}`, padding: 22, maxWidth: 640, width: "100%" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,27,45,.4)", zIndex: 90, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isMobile ? "16px 10px" : "40px 16px", overflowY: "auto" }}>
+      <div style={{ background: "#fff", borderRadius: 12, border: `1px solid ${shellColors.line}`, padding: isMobile ? 16 : 22, maxWidth: 640, width: "100%" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
           <div style={{ fontWeight: 800, fontSize: 16 }}>Map your columns</div>
           <button onClick={onCancel} style={{ border: "none", background: "none", cursor: "pointer", color: shellColors.inkFaint }}><X size={18} /></button>

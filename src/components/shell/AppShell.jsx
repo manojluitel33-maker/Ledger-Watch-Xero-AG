@@ -236,74 +236,78 @@ function AppShell() {
   };
 
   const runAutoReconciliation = useCallback(() => {
-    if (!sharedTransactions || !sharedTransactions.length) return;
-    if (!bankFiles || !bankFiles.length) return;
+    try {
+      if (!sharedTransactions || !sharedTransactions.length) return;
+      if (!bankFiles || !bankFiles.length) return;
 
-    // Build the same per-account map the reconciliation tool uses.
-    const xeroAccounts = {};
-    sharedTransactions.forEach((t) => {
-      if (!t.account || !t.date) return;
-      if (!xeroAccounts[t.account]) xeroAccounts[t.account] = [];
-      xeroAccounts[t.account].push({ date: t.date, contact: t.vendor || t.description || "", amount: t.amount });
-    });
+      // Build the same per-account map the reconciliation tool uses.
+      const xeroAccounts = {};
+      sharedTransactions.forEach((t) => {
+        if (!t.account || !t.date) return;
+        if (!xeroAccounts[t.account]) xeroAccounts[t.account] = [];
+        xeroAccounts[t.account].push({ date: t.date, contact: t.vendor || t.description || "", amount: t.amount });
+      });
 
-    const readyFiles = bankFiles.filter((f) => f.mapping && (f.accountLabel || xeroAccountNames.length === 1));
-    if (!readyFiles.length) return;
+      const readyFiles = bankFiles.filter((f) => f.mapping && (f.accountLabel || xeroAccountNames.length === 1));
+      if (!readyFiles.length) return;
 
-    const runs = readyFiles.map((bf) => {
-      const accountName = bf.accountLabel || xeroAccountNames[0];
-      const accountTx = xeroAccounts[accountName] || [];
-      if (!accountTx.length) return null;
+      const runs = readyFiles.map((bf) => {
+        const accountName = bf.accountLabel || xeroAccountNames[0];
+        const accountTx = xeroAccounts[accountName] || [];
+        if (!accountTx.length) return null;
 
-      const tolerance = (bf.tolerance !== undefined && bf.tolerance !== null && bf.tolerance !== "") ? Number(bf.tolerance) : 3;
-      const allBankTx = buildBankTx(bf.rows, bf.mapping);
-      if (!allBankTx.length) return null;
+        const tolerance = (bf.tolerance !== undefined && bf.tolerance !== null && bf.tolerance !== "") ? Number(bf.tolerance) : 3;
+        const allBankTx = buildBankTx(bf.rows, bf.mapping);
+        if (!allBankTx.length) return null;
 
-      let month = null;
-      if (bf.monthLabel && MONTH_NAMES_LOOKUP[bf.monthLabel]) {
-        const targetMonth = MONTH_NAMES_LOOKUP[bf.monthLabel];
-        const yearsWithMonth = [...new Set(
-          accountTx
-            .filter((t) => t.date && t.date.getMonth() + 1 === targetMonth)
-            .map((t) => t.date.getFullYear())
-        )].sort((a, b) => b - a);
+        let month = null;
+        if (bf.monthLabel && MONTH_NAMES_LOOKUP[bf.monthLabel]) {
+          const targetMonth = MONTH_NAMES_LOOKUP[bf.monthLabel];
+          const yearsWithMonth = [...new Set(
+            accountTx
+              .filter((t) => t.date && t.date.getMonth() + 1 === targetMonth)
+              .map((t) => t.date.getFullYear())
+          )].sort((a, b) => b - a);
 
-        if (yearsWithMonth.length) {
-          month = `${yearsWithMonth[0]}-${String(targetMonth).padStart(2, "0")}`;
+          if (yearsWithMonth.length) {
+            month = `${yearsWithMonth[0]}-${String(targetMonth).padStart(2, "0")}`;
+          }
         }
-      }
 
-      // If month wasn't determined via monthLabel, detect from bankTx dates
-      if (!month) {
-        const validDates = allBankTx.map((t) => t.date).filter(Boolean);
-        if (validDates.length) {
-          const monthCounts = {};
-          validDates.forEach((d) => {
-            const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-            monthCounts[k] = (monthCounts[k] || 0) + 1;
-          });
-          const sortedMonths = Object.keys(monthCounts).sort((a, b) => monthCounts[b] - monthCounts[a]);
-          if (sortedMonths.length) month = sortedMonths[0];
+        // If month wasn't determined via monthLabel, detect from bankTx dates
+        if (!month) {
+          const validDates = allBankTx.map((t) => t.date).filter(Boolean);
+          if (validDates.length) {
+            const monthCounts = {};
+            validDates.forEach((d) => {
+              const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+              monthCounts[k] = (monthCounts[k] || 0) + 1;
+            });
+            const sortedMonths = Object.keys(monthCounts).sort((a, b) => monthCounts[b] - monthCounts[a]);
+            if (sortedMonths.length) month = sortedMonths[0];
+          }
         }
+
+        if (!month) return null;
+
+        const xeroTx = filterByMonthWithBuffer(accountTx, month, tolerance);
+        const bankTx = filterByMonthWithBuffer(allBankTx, month, tolerance);
+        const results = reconcile(xeroTx, bankTx, tolerance);
+
+        // Trim unmatched leftovers back to the true month range.
+        const { start, end } = monthRange(month);
+        const inMonth = (tx) => tx.date && tx.date >= start && tx.date <= end;
+        results.xeroOnly = results.xeroOnly.filter(inMonth);
+        results.bankOnly = results.bankOnly.filter(inMonth);
+
+        return { account: accountName, month, results };
+      }).filter(Boolean);
+
+      if (runs.length) {
+        setBankRecoSnapshot(runs);
       }
-
-      if (!month) return null;
-
-      const xeroTx = filterByMonthWithBuffer(accountTx, month, tolerance);
-      const bankTx = filterByMonthWithBuffer(allBankTx, month, tolerance);
-      const results = reconcile(xeroTx, bankTx, tolerance);
-
-      // Trim unmatched leftovers back to the true month range.
-      const { start, end } = monthRange(month);
-      const inMonth = (tx) => tx.date && tx.date >= start && tx.date <= end;
-      results.xeroOnly = results.xeroOnly.filter(inMonth);
-      results.bankOnly = results.bankOnly.filter(inMonth);
-
-      return { account: accountName, month, results };
-    }).filter(Boolean);
-
-    if (runs.length) {
-      setBankRecoSnapshot(runs);
+    } catch (err) {
+      console.error("Auto reconciliation error:", err);
     }
   }, [bankFiles, sharedTransactions, xeroAccountNames]);
 
